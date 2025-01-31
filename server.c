@@ -23,7 +23,7 @@ int main() {
 
     // Create the socket
     sfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-
+    
     // Bind the socket to the address
     bind(sfd, (struct sockaddr*)&saddr, sizeof(saddr));
 

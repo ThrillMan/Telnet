@@ -14,7 +14,7 @@
 
 char *path_generator(const char *currpath, const char *buf) {
     // Allocate enough memory for the new path
-    char *str_to_ret = malloc(sizeof(char) * 256);  // Ensure enough space for safety
+    char *str_to_ret = malloc(sizeof(char) * 256); 
     if (str_to_ret == NULL) {
         perror("malloc failed");
         return NULL;
@@ -50,8 +50,32 @@ char *path_generator(const char *currpath, const char *buf) {
     return str_to_ret;
 }
 
+char *list_of_errors(int error){
+    //return proper error associated with invalid command
+    char *str_to_ret = malloc(sizeof(char) * 256);
+    if (str_to_ret == NULL) {
+        perror("malloc failed");
+        return NULL;
+    }
+    switch(error){
+        case 1:
+            sprintf(str_to_ret,"Permission denied\n");
+            break;
+        case 2:
+            sprintf(str_to_ret,"No such file or directory\n");
+            break;
+        case 127:
+            sprintf(str_to_ret,"Command not found\n");
+            break;
+        default:
+            sprintf(str_to_ret,"Some kind of error occurred\n");
+            break;
+    }
+    return str_to_ret;
+}
+
 void* cthread(void* arg) {
-    char buf[512];
+    char buf[4096];
     int rc;
 
     char login[128];
@@ -65,8 +89,8 @@ void* cthread(void* arg) {
     printf("new connection from:%s\n",login);
 
     //default path
-    char path[128];
-    strcpy(path,"/home");
+    char path[512];
+    strcpy(path,"/var/tmp");
 
     while(1){
     
@@ -83,7 +107,7 @@ void* cthread(void* arg) {
     printf("%s: %s\n", login,buf);
 
     FILE *fp;
-    char file_type[40];
+    char file_type[400];
     memset(&file_type,0,sizeof(file_type));
 
     
@@ -93,13 +117,13 @@ void* cthread(void* arg) {
         strcpy(temp_path,path_generator(path,buf));
 
         if(strcmp(temp_path,"ERROR_WRONG_PATH")==0){
-            write(c->cfd, "wrong directory\n", strlen("wrong directory"));
+            write(c->cfd, "Wrong directory\n", strlen("Wrong directory"));
             printf("wrong directory\n");
         }
 
         else{
             strcpy(path,temp_path);
-            write(c->cfd, "changed directory to\n", strlen("changed directory"));
+            write(c->cfd, "Changed directory to\n", strlen("Changed directory"));
             printf("changed directory to:%s\n",path);
             
         }
@@ -107,22 +131,8 @@ void* cthread(void* arg) {
         continue;
     }
 
-    
 
-    // if(!strncmp(buf,"cd",2)){
-    //     char* directory = buf+3;
-        
-    //     chdir(directory);
-    //     write(c->cfd, "changed directory to\n", strlen("changed directory"));
-    //     printf("changed directory to:%s\n",directory);
-    //     continue;
-    // }
-    
-    //fp = popen(buf, "r");
-
-    char command[1024];
-    // strcpy(command,path);
-    // strcat(command,buf);
+    char command[4612];
 
     //generate proper cd command
     sprintf(command, "cd %s&&%s", path,buf); 
@@ -130,6 +140,7 @@ void* cthread(void* arg) {
     fp = popen(command,"r");
     printf("command:%s\n",command);
     if (fp == NULL) {
+        printf("Failed to run command\n");
         char error[128];
         strcpy(error,"Failed to run command\n");
         printf("%s",error);
@@ -146,18 +157,23 @@ void* cthread(void* arg) {
 
     while (fgets(file_type, sizeof(file_type), fp) != NULL) {
         printf("%s", file_type);
-        //write(c->cfd, file_type, strlen(file_type));
         strcat(buf,file_type);
     }
     write(c->cfd, buf, strlen(buf));
-    pclose(fp);
 
+    int status = pclose(fp);
+    printf("\nstatus -> %d\n", WEXITSTATUS(status));
+
+    //means the command has not been executed
+    if(WEXITSTATUS(status)>0){
+        char error[128];
+        strcpy(error,list_of_errors(WEXITSTATUS(status)));
+        write(c->cfd, error, strlen(error));
+        memset(&error, 0, sizeof(error));
+    }
     memset(&buf, 0, sizeof(buf));
-    //write(c->cfd, "Hello World!\n", 13); // Send a response
-
     }
 
-    
     // Clean up and close the connection
     memset(&buf, 0, sizeof(buf));
     close(c->cfd);
